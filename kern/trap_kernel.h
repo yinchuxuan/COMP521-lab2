@@ -1,5 +1,5 @@
-#ifndef _pmem_h 
-#define _pmem_h 
+#ifndef _pmem_h
+#define _pmem_h
 
 #include "hardware.h"
 #include <stdio.h>

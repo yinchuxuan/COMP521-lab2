@@ -14,11 +14,11 @@ void init_physical_pages(int pmem_size) {
     free_page_list = NULL;
     int i;
 
-    page_frame_list = malloc(page_num * sizeof(struct physical_page_frame));
+    page_frame_list = (struct physical_page_frame*)malloc(page_num * sizeof(struct physical_page_frame));
 
     for (i = 0; i < page_num; i++) {        // assign pages to free page list
         // Pages in [KERNEL_STACK_BASE, kernel_brk] are already in used
-        if (i >= (PAGE_ROUND_DOWN(KERNEL_STACK_BASE) >> PAGESHIFT) && i <= (PAGE_ROUND_DOWN((unsigned int)kernel_brk) >> PAGESHIFT)) {
+        if (i >= (DOWN_TO_PAGE(KERNEL_STACK_BASE) >> PAGESHIFT) && i <= (DOWN_TO_PAGE((unsigned int)kernel_brk) >> PAGESHIFT)) {
             page_frame_list[i].next = NULL;
             page_frame_list[i].page_reference = 1;
         } else {
@@ -32,7 +32,7 @@ void init_physical_pages(int pmem_size) {
 struct physical_page_frame* allocate_page() {
     if (!free_page_list) {  // run out of physical memory
         printf("Run out of physical memory. Cannot allocate new page!\n");
-        exit(1);
+        return NULL;
     }
     
     struct physical_page_frame* result = free_page_list;
@@ -55,7 +55,7 @@ void free_page(struct physical_page_frame* page_frame) {
     free_page_list = page_frame;
 }
 
-void* page_frame_to_physical_address(struct physical_page_frame* page_frame) {
+unsigned int page_frame_to_physical_address(struct physical_page_frame* page_frame) {
     return PMEM_BASE + ((unsigned int)(page_frame - page_frame_list) << PAGESHIFT);
 }
 
