@@ -1,7 +1,7 @@
 #ifndef _pcb_h
 #define _pcb_h
 
-#include "hardware.h"
+#include <comp421/hardware.h>
 
 /*
  * Status of process
@@ -29,16 +29,27 @@ struct pcb {
     void *sp;		/* SP at time of interrupt */
     unsigned long regs[NUM_REGS]; /* general registers at time of interrupt */
     struct pcb* next;       /* next process control block */
+    int clock_ticks;        /* clock ticks that current process already run across */
+};
+
+struct delayed_pcb {
+    struct pcb* process;
+    int remaining_clock_ticks;
+    struct delayed_pcb* next;
 };
 
 struct pcb* pcb_list;
 
 struct pcb* current_pcb;
 
-struct pcb* pcb_list_tail;
+struct delayed_pcb* delayed_pcb_list; 
 
 SavedContext* switchFunction(SavedContext*, void*, void*);
 
 struct pcb* create_process();
+
+void terminate_process(struct pcb*);
+
+void round_robin_process_schedule();
 
 #endif /* _pcb_h */

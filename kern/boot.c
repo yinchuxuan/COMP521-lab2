@@ -10,21 +10,16 @@
 #include "pmem.h"
 #include "pcb.h"
 #include "load.h"
-
-void trap_kernel_handler() {
-   printf("trap kernel handler is called!\n"); 
-}
-
-void trap_clock_handler() {
-    printf("trap clock handler is called!\n");
-}
+#include "trap_kernel.h"
+#include "trap_clock.h"
 
 void trap_illegal_handler() {
     printf("trap illegal handler is called!\n");
 }
 
-void trap_memory_handler() {
-    printf("trap memory handler is called!\n");
+void trap_memory_handler(ExceptionInfo* info) {
+    //printf("error address is:%x\n", info->addr);
+    //printf("pc is %x\n", info->pc);
 }
 
 void trap_math_handler() {
@@ -41,9 +36,7 @@ void trap_tty_transmit_handler() {
 
 void idle_process() {
     printf("this is idle process!\n");
-    while (1) {
-        pause();
-    }
+    while (1);
 }
 
 void setup_region0_page_table(struct pte* region0_page_table) {
@@ -62,7 +55,7 @@ void setup_region0_page_table(struct pte* region0_page_table) {
             }
             page_frame->page_reference++;
 
-            unsigned int physical_address = page_frame_to_physical_address(allocate_page());
+            unsigned int physical_address = page_frame_to_physical_address(page_frame);
 
             region0_page_table[vpn].pfn = PFN(physical_address);
             region0_page_table[vpn].valid = VALID_PAGE;
@@ -135,13 +128,35 @@ void KernelStart(ExceptionInfo * info, unsigned int pmem_size, void * origin_brk
     kernel_brk = origin_brk;
 
     /* Initialize interrupt vector table */
-    interrupt_vector_table[TRAP_KERNEL] = &trap_kernel_handler;
-    interrupt_vector_table[TRAP_CLOCK] = &trap_clock_handler;
-    interrupt_vector_table[TRAP_ILLEGAL] = &trap_illegal_handler;
-    interrupt_vector_table[TRAP_MEMORY] = &trap_memory_handler;
-    interrupt_vector_table[TRAP_MATH] = &trap_math_handler;
-    interrupt_vector_table[TRAP_TTY_RECEIVE] = &trap_tty_receive_handler;
-    interrupt_vector_table[TRAP_TTY_TRANSMIT] = &trap_tty_transmit_handler;
+    int i;
+    for (i = 0; i < TRAP_VECTOR_SIZE; i++) {
+        switch (i) {
+            case TRAP_KERNEL:
+                interrupt_vector_table[i] = &trap_kernel_handler;
+                break;
+            case TRAP_CLOCK:
+                interrupt_vector_table[i] = &trap_clock_handler;
+                break;
+            case TRAP_ILLEGAL:
+                interrupt_vector_table[i] = &trap_illegal_handler;
+                break;
+            case TRAP_MEMORY:
+                interrupt_vector_table[i] = &trap_memory_handler;
+                break;
+            case TRAP_MATH:
+                interrupt_vector_table[i] = &trap_math_handler;
+                break;
+            case TRAP_TTY_RECEIVE:
+                interrupt_vector_table[i] = &trap_tty_receive_handler;
+                break;
+            case TRAP_TTY_TRANSMIT:
+                interrupt_vector_table[i] = &trap_tty_transmit_handler;
+                break;
+            default:
+                interrupt_vector_table[i] = NULL;
+                break;
+        }
+    }
 
     WriteRegister(REG_VECTOR_BASE, (RCS421RegVal)interrupt_vector_table);
 
@@ -161,24 +176,40 @@ void KernelStart(ExceptionInfo * info, unsigned int pmem_size, void * origin_brk
     WriteRegister(REG_VM_ENABLE, 1);
     is_vm_on = 1;
 
+    /* Initialize some pcb list */
+    delayed_pcb_list = (struct delayed_pcb*)malloc(sizeof(struct delayed_pcb));     // make a pesudo head
+    delayed_pcb_list->next = NULL;
+
     /* Create first idle process */
     pcb_list = (struct pcb*)malloc(sizeof(struct pcb));
+    pcb_list->next = NULL;
     pcb_list->pid = 0;
+    pcb_list->clock_ticks = 0;
+    pcb_list->status = READY;
     pcb_list->region0_page_table = (struct pte*)malloc(PAGE_TABLE_SIZE);
     setup_region0_page_table(pcb_list->region0_page_table);
-    pcb_list_tail = pcb_list;
 
     /* Create init process */
     struct pcb* new_pcb = (struct pcb*)malloc(sizeof(struct pcb));
-    pcb_list_tail->next = new_pcb;
-    pcb_list_tail = new_pcb;
+    new_pcb->next = pcb_list->next;
+    pcb_list->next = new_pcb;
     new_pcb->pid = 1;
+    new_pcb->clock_ticks = 0;
     new_pcb->status = NEW;
     new_pcb->region0_page_table = initial_region0_page_table; 
 
-    current_pcb = pcb_list_tail;
+    current_pcb = pcb_list->next;
 
-    // load init process 
+   /* save context for idle process */
+    ContextSwitch(switchFunction, &pcb_list->context, pcb_list, pcb_list);
+    if (current_pcb->pid == 0) {    // run idle process as a user process
+        info->pc = &idle_process;
+        info->sp = KERNEL_STACK_LIMIT;
+        info->psr = PSR_MODE;
+        return;
+    }
+
+    /* load init process */
     int ret = LoadProgram("init", args);
     if (ret == -1) {
         printf("load program with still runnable error!\n");
@@ -188,7 +219,6 @@ void KernelStart(ExceptionInfo * info, unsigned int pmem_size, void * origin_brk
         exit(1);
     }
 
-    int i;
     info->pc = current_pcb->pc;
     info->sp = current_pcb->sp;
     for (i = 0; i < NUM_REGS; i++) {

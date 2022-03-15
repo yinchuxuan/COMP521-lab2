@@ -1,7 +1,7 @@
 #ifndef _boot_h
 #define _boot_h
 
-#include "hardware.h"
+#include <comp421/hardware.h>
 
 struct pte* region1_page_table;
 

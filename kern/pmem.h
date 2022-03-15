@@ -1,7 +1,7 @@
 #ifndef _pmem_h 
 #define _pmem_h 
 
-#include "hardware.h"
+#include <comp421/hardware.h>
 #include <stdio.h>
 
 /*

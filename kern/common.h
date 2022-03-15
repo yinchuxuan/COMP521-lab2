@@ -1,7 +1,7 @@
 #ifndef _common_h
 #define _common_h
 
-#include "hardware.h"
+#include <comp421/hardware.h>
 
 #define VPN(va) (va >> PAGESHIFT)
 

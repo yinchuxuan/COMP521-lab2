@@ -273,7 +273,6 @@ int LoadProgram(char *name, char **args) {
      */
     for (vpn = VPN(USER_STACK_LIMIT) - stack_npg; vpn < VPN(USER_STACK_LIMIT); vpn++) {
         struct physical_page_frame* page_frame = allocate_page();
-        printf("User stack vpn:%x\n", vpn);
 
         if (!page_frame) { //not enough free physical memory
             TracePrintf(0,

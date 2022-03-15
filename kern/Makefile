@@ -33,8 +33,8 @@ ALL = yalnix init
 #	make up your kernel, and KERNEL_SRCS should  be a list of
 #	the corresponding source files that make up your kernel.
 #
-KERNEL_OBJS = boot.o kbrk.o pmem.o pcb.o load.o
-KERNEL_SRCS = boot.c kbrk.c pmem.c pcb.c load.c
+KERNEL_OBJS = boot.o kbrk.o pmem.o pcb.o load.o trap_kernel.o trap_clock.o
+KERNEL_SRCS = boot.c kbrk.c pmem.c pcb.c load.c trap_kernel.c trap_clock.c
 
 #
 #	You should not have to modify anything else in this Makefile

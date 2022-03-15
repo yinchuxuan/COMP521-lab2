@@ -1,7 +1,7 @@
 #ifndef _kbrk_h
 #define _kbrk_h
 
-#include "hardware.h"
+#include <comp421/hardware.h>
 
 void* kernel_brk;
 
