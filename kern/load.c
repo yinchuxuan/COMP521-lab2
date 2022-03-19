@@ -183,7 +183,7 @@ int LoadProgram(char *name, char **args) {
                         name);
                     free(argbuf);
                     close(fd);
-                    return (-1);
+                    return (-2);
                 }               
 
                 page_frame->page_reference--;
@@ -224,12 +224,12 @@ int LoadProgram(char *name, char **args) {
                 name);
             free(argbuf);
             close(fd);
-            return (-1);
+            return (-2);
         }
 
         page_frame->page_reference++;
         page_table[vpn].valid = VALID_PAGE;
-        page_table[vpn].pfn = page_frame_to_physical_address(page_frame) >> PAGESHIFT; 
+        page_table[vpn].pfn = PFN(page_frame_to_physical_address(page_frame)); 
         page_table[vpn].kprot = PAGE_READ | PAGE_WRITE;
         page_table[vpn].uprot = PAGE_READ | PAGE_EXECUTE;
     }
@@ -251,12 +251,12 @@ int LoadProgram(char *name, char **args) {
                 name);
             free(argbuf);
             close(fd);
-            return (-1);
+            return (-2);
         }       
 
         page_frame->page_reference++;
         page_table[vpn].valid = VALID_PAGE;
-        page_table[vpn].pfn = page_frame_to_physical_address(page_frame) >> PAGESHIFT; 
+        page_table[vpn].pfn = PFN(page_frame_to_physical_address(page_frame)); 
         page_table[vpn].kprot = PAGE_READ | PAGE_WRITE;
         page_table[vpn].uprot = PAGE_READ | PAGE_WRITE;
     }
@@ -280,12 +280,12 @@ int LoadProgram(char *name, char **args) {
                 name);
             free(argbuf);
             close(fd);
-            return (-1);
+            return (-2);
         }
 
         page_frame->page_reference++;
         page_table[vpn].valid = VALID_PAGE;
-        page_table[vpn].pfn = page_frame_to_physical_address(page_frame) >> PAGESHIFT; 
+        page_table[vpn].pfn = PFN(page_frame_to_physical_address(page_frame)); 
         page_table[vpn].kprot = PAGE_READ | PAGE_WRITE;
         page_table[vpn].uprot = PAGE_READ | PAGE_WRITE;
     }
@@ -372,6 +372,9 @@ int LoadProgram(char *name, char **args) {
         current_pcb->regs[i] = 0;
     }
     current_pcb->psr = 0;
+
+    current_pcb->user_brk = (MEM_INVALID_PAGES + text_npg + data_bss_npg) * PAGESIZE;
+    current_pcb->user_stack_base = USER_STACK_LIMIT - stack_npg * PAGESIZE;
 
     return (0);
 }

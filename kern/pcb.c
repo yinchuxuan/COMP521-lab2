@@ -20,23 +20,25 @@ SavedContext* switchFunction(SavedContext* old_context, void* old_pcb, void* new
 
     /* just for saving context and copying kernel stack */
     if (old_pcb_p->pid == new_pcb_p->pid) {
-        /* borrow PTEs in current page table in range [0, KERNEL_STACK_PAGES] */
+        /* borrow one PTE in current page table at user_brk */
+        int borrowed_PTE = VPN(UP_TO_PAGE(current_pcb->user_brk));
         int i;
-        for (i = MEM_INVALID_PAGES; i < MEM_INVALID_PAGES + KERNEL_STACK_PAGES; i++) {
-            current_pcb->region0_page_table[i].pfn = old_pcb_p->region0_page_table[VPN(KERNEL_STACK_BASE) + i - MEM_INVALID_PAGES].pfn;
-            current_pcb->region0_page_table[i].valid = VALID_PAGE;
-            current_pcb->region0_page_table[i].kprot = PAGE_READ | PAGE_WRITE;
+        for (i = 0; i < KERNEL_STACK_PAGES; i++) {
+            current_pcb->region0_page_table[borrowed_PTE].pfn = old_pcb_p->region0_page_table[VPN(KERNEL_STACK_BASE) + i].pfn;
+            current_pcb->region0_page_table[borrowed_PTE].valid = VALID_PAGE;
+            current_pcb->region0_page_table[borrowed_PTE].kprot = PAGE_READ | PAGE_WRITE;
+
+            /* copy current kernel stack to physical address space of new pcb's kernel stack one page at a time */
+            memcpy((void*)UP_TO_PAGE(current_pcb->user_brk), KERNEL_STACK_BASE + i * PAGESIZE, PAGESIZE);
+            WriteRegister(REG_TLB_FLUSH, TLB_FLUSH_0);
         }
 
-        /* copy current kernel stack to physical address space of new pcb's kernel stack */
-        memcpy((void*)MEM_INVALID_SIZE, KERNEL_STACK_BASE, KERNEL_STACK_SIZE);
+        /* restore PTE in current page table */
+        current_pcb->region0_page_table[borrowed_PTE].pfn = 0;
+        current_pcb->region0_page_table[borrowed_PTE].valid = INVALID_PAGE;
+        current_pcb->region0_page_table[borrowed_PTE].kprot = 0;
 
-        /* restore PTEs in current page table */
-        for (i = MEM_INVALID_PAGES; i < MEM_INVALID_PAGES + KERNEL_STACK_PAGES; i++) {
-            current_pcb->region0_page_table[i].pfn = 0;
-            current_pcb->region0_page_table[i].valid = INVALID_PAGE;
-            current_pcb->region0_page_table[i].kprot = 0;
-        }
+        WriteRegister(REG_TLB_FLUSH, TLB_FLUSH_0);
 
         return &old_pcb_p->context;
     }
@@ -55,6 +57,8 @@ struct pcb* create_process() {
     new_pcb->pid = next_pid++;
     new_pcb->clock_ticks = 0;
     new_pcb->status = READY;
+    new_pcb->user_brk = MEM_INVALID_SIZE;
+    new_pcb->user_stack_base = USER_STACK_LIMIT;
     new_pcb->region0_page_table = (struct pte*)malloc(PAGE_TABLE_SIZE);
     if (!new_pcb->region0_page_table) {
         // deal with allocation failure
@@ -65,7 +69,44 @@ struct pcb* create_process() {
 }
 
 void terminate_process(struct pcb* process) {
-    
+    unsigned int address;
+    int vpn;
+    struct physical_page_frame* page_frame;
+
+    /* don't delete init process's page table, since this is initial region0 page table */
+    if (process->pid == 1) {
+        /* unload init program */
+        for(address = 0; address < VMEM_0_LIMIT; address += PAGESIZE) {
+            if (address < DOWN_TO_PAGE(KERNEL_STACK_BASE) || address >= UP_TO_PAGE(KERNEL_STACK_LIMIT)) {
+                vpn = VPN(address);
+
+                /* should deallocate physical page */
+                if (process->region0_page_table[vpn].valid)  {
+                    page_frame = physical_address_to_page_frame(process->region0_page_table[vpn].pfn << PAGESHIFT);
+                    if ((--page_frame->page_reference) == 0) {
+                        free_page(page_frame);
+                    }            
+                }
+            }
+        }
+        
+        WriteRegister(REG_TLB_FLUSH, TLB_FLUSH_0);
+    } else {
+        for(address = 0; address < VMEM_0_LIMIT; address += PAGESIZE) {
+            vpn = VPN(address);
+
+            /* should deallocate physical page */
+            if (process->region0_page_table[vpn].valid)  {
+                page_frame = physical_address_to_page_frame(process->region0_page_table[vpn].pfn << PAGESHIFT);
+                if ((--page_frame->page_reference) == 0) {
+                    free_page(page_frame);
+                }            
+            }
+        }
+
+        /* deallocate page table */
+        free(process->region0_page_table);
+    }
 }
 
 void round_robin_process_schedule() {
@@ -74,6 +115,14 @@ void round_robin_process_schedule() {
 
     /* try to find runnable process, switch to it */
     while (tmp->next != NULL) {
+        if (tmp->next->status == TERMINATED) {   // lazy deleteion
+            struct pcb* delete_pcb = tmp->next;
+            tmp->next = delete_pcb->next;
+            terminate_process(delete_pcb);
+            free(delete_pcb);
+            continue; 
+        }
+
         if (tmp->next->status == READY && tmp->next->pid != old_pcb->pid) {
             tmp->next->status = RUNNING;
             current_pcb = tmp->next;

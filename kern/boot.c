@@ -12,19 +12,9 @@
 #include "load.h"
 #include "trap_kernel.h"
 #include "trap_clock.h"
-
-void trap_illegal_handler() {
-    printf("trap illegal handler is called!\n");
-}
-
-void trap_memory_handler(ExceptionInfo* info) {
-    //printf("error address is:%x\n", info->addr);
-    //printf("pc is %x\n", info->pc);
-}
-
-void trap_math_handler() {
-    printf("trap math handler is called!\n");
-}
+#include "trap_memory.h"
+#include "trap_illegal.h"
+#include "trap_math.h"
 
 void trap_tty_receive_handler() {
     printf("trap tty receive handler is called!\n");
@@ -42,6 +32,7 @@ void idle_process() {
 void setup_region0_page_table(struct pte* region0_page_table) {
     unsigned int address;
     int vpn;
+    struct physical_page_frame* page_frame;
 
     memset(region0_page_table, 0, PAGE_TABLE_SIZE);
 
@@ -49,7 +40,7 @@ void setup_region0_page_table(struct pte* region0_page_table) {
         vpn = VPN(address);
 
         if (address >= DOWN_TO_PAGE(KERNEL_STACK_BASE) && address < DOWN_TO_PAGE(KERNEL_STACK_LIMIT)) {
-            struct physical_page_frame* page_frame = allocate_page();
+            page_frame = allocate_page();
             if (!page_frame) {      // allocating physical memory failed
                 exit(1); 
             }
@@ -186,6 +177,8 @@ void KernelStart(ExceptionInfo * info, unsigned int pmem_size, void * origin_brk
     pcb_list->pid = 0;
     pcb_list->clock_ticks = 0;
     pcb_list->status = READY;
+    pcb_list->user_brk = MEM_INVALID_SIZE;
+    pcb_list->user_stack_base = USER_STACK_LIMIT; 
     pcb_list->region0_page_table = (struct pte*)malloc(PAGE_TABLE_SIZE);
     setup_region0_page_table(pcb_list->region0_page_table);
 
@@ -195,12 +188,14 @@ void KernelStart(ExceptionInfo * info, unsigned int pmem_size, void * origin_brk
     pcb_list->next = new_pcb;
     new_pcb->pid = 1;
     new_pcb->clock_ticks = 0;
-    new_pcb->status = NEW;
+    new_pcb->status = READY;
+    new_pcb->user_brk = MEM_INVALID_SIZE;
+    new_pcb->user_stack_base = USER_STACK_LIMIT;
     new_pcb->region0_page_table = initial_region0_page_table; 
 
     current_pcb = pcb_list->next;
 
-   /* save context for idle process */
+    /* save context for idle process */
     ContextSwitch(switchFunction, &pcb_list->context, pcb_list, pcb_list);
     if (current_pcb->pid == 0) {    // run idle process as a user process
         info->pc = &idle_process;

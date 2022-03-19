@@ -30,6 +30,8 @@ struct pcb {
     unsigned long regs[NUM_REGS]; /* general registers at time of interrupt */
     struct pcb* next;       /* next process control block */
     int clock_ticks;        /* clock ticks that current process already run across */
+    unsigned int user_brk;  /* user break in current process */
+    unsigned int user_stack_base;   /* user stack base in current process */
 };
 
 struct delayed_pcb {

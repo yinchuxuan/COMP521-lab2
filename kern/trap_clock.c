@@ -1,6 +1,7 @@
 #ifndef _trap_clock_c
 #define _trap_clock_c
 
+#include <stdio.h>
 #include "trap_clock.h"
 #include "pcb.h"
 

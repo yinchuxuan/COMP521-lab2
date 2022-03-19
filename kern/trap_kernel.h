@@ -7,4 +7,6 @@
 
 void trap_kernel_handler(ExceptionInfo*);
 
+int yalnix_exit_handler(int);
+
 #endif /* _trap_kernel_h */
